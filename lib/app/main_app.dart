@@ -1,5 +1,5 @@
+import 'package:feed_vertical_infinito/pages/videos_feed.dart';
 import 'package:flutter/material.dart';
-import '../pages/video_feed_page.dart';
 
 class MainApp extends StatelessWidget {
   const MainApp({super.key});
@@ -9,7 +9,7 @@ class MainApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Bluesky Reels',
-      home: const VideoFeedPage(),
+      home: const VideosFeed(),
     );
   }
 }
