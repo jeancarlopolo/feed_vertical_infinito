@@ -2,11 +2,17 @@ import 'package:feed_vertical_infinito/models/video.dart';
 import 'package:feed_vertical_infinito/widgets/author_info.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
+import 'package:signals_flutter/signals_flutter.dart';
 
 class VideoPlayerWidget extends StatefulWidget {
   final Video video;
+  final bool autoPlay;
 
-  const VideoPlayerWidget({super.key, required this.video});
+  const VideoPlayerWidget({
+    super.key,
+    required this.video,
+    this.autoPlay = true,
+  });
 
   @override
   State<VideoPlayerWidget> createState() => _VideoPlayerWidgetState();
@@ -14,13 +20,36 @@ class VideoPlayerWidget extends StatefulWidget {
 
 class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   late VideoPlayerController _controller;
-  bool _isInitialized = false;
-  bool _isPlaying = true;
+  final _isInitialized = signal(false);
+  bool _isPlaying = false;
 
   @override
   void initState() {
     super.initState();
     _initializeVideoPlayer();
+  }
+
+  @override
+  void didUpdateWidget(VideoPlayerWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Quando o autoPlay muda, atualize o estado de reprodução
+    if (widget.autoPlay != oldWidget.autoPlay) {
+      _updatePlayState();
+    }
+  }
+
+  void _updatePlayState() {
+    if (widget.autoPlay && _isInitialized.watch(context) && !_controller.value.isPlaying) {
+      _controller.play();
+      setState(() {
+        _isPlaying = true;
+      });
+    } else if (!widget.autoPlay && _isInitialized.watch(context) && _controller.value.isPlaying) {
+      _controller.pause();
+      setState(() {
+        _isPlaying = false;
+      });
+    }
   }
 
   Future<void> _initializeVideoPlayer() async {
@@ -33,13 +62,14 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
     // Configurar para reprodução em loop
     await _controller.setLooping(true);
 
-    // Iniciar reprodução automaticamente
-    await _controller.play();
+    // Iniciar reprodução com base no autoPlay
+    if (widget.autoPlay) {
+      await _controller.play();
+      _isPlaying = true;
+    }
 
     if (mounted) {
-      setState(() {
-        _isInitialized = true;
-      });
+      _isInitialized.value = true;
     }
   }
 
@@ -63,7 +93,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_isInitialized) {
+    if (!_isInitialized.watch(context)) {
       return const Center(child: CircularProgressIndicator());
     }
 
@@ -99,7 +129,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
             Container(
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.black.withValues(alpha: 0.5),
+                color: Colors.black.withOpacity(0.5),
               ),
               padding: const EdgeInsets.all(12),
               child: const Icon(
