@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../pages/video_feed_page.dart';
 
 class MainApp extends StatelessWidget {
 
