@@ -1,28 +1,18 @@
 class Video {
   final String id;
-  final String uri;
-  final String cid;
-  final String authorDid;
   final String authorHandle;
   final String authorDisplayName;
   final String authorAvatar;
   final String text;
   final String videoUrl;
-  final DateTime indexedAt;
-  final Map<String, dynamic> rawData;
 
   Video({
     required this.id,
-    required this.uri,
-    required this.cid,
-    required this.authorDid,
     required this.authorHandle,
     required this.authorDisplayName,
     this.authorAvatar = '',
     required this.text,
     required this.videoUrl,
-    required this.indexedAt,
-    required this.rawData,
   });
 
   factory Video.fromJson(Map<String, dynamic> json) {
@@ -51,31 +41,22 @@ class Video {
 
     return Video(
       id: post['id'] ?? '',
-      uri: post['uri'] ?? '',
-      cid: post['cid'] ?? '',
-      authorDid: author['did'] ?? '',
       authorHandle: author['handle'] ?? '',
       authorDisplayName: author['displayName'] ?? '',
       authorAvatar: author['avatar'] ?? '',
       text: record['text'] ?? '',
       videoUrl: videoUrl,
-      indexedAt: DateTime.parse(post['indexedAt'] ?? DateTime.now().toIso8601String()),
-      rawData: json,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'uri': uri,
-      'cid': cid,
-      'authorDid': authorDid,
       'authorHandle': authorHandle,
       'authorDisplayName': authorDisplayName,
       'authorAvatar': authorAvatar,
       'text': text,
       'videoUrl': videoUrl,
-      'indexedAt': indexedAt.toIso8601String(),
     };
   }
 }
