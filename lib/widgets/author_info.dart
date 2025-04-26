@@ -16,7 +16,9 @@ class AuthorInfo extends StatelessWidget {
     return Row(
       children: [
         CircleAvatar(backgroundImage: NetworkImage(authorAvatar)),
+        SizedBox(width: 8),
         Text(authorDisplayName, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold)),
+        SizedBox(width: 8),
         Text(authorHandle, style: Theme.of(context).textTheme.bodyMedium),
       ],
     );

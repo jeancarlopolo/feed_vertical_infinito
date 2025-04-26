@@ -8,5 +8,6 @@
         "**/Thumbs.db": true
     },
     "hide-files.files": [],
-    "cmake.sourceDirectory": "C:/Users/Usuario/Documents/feed_vertical_infinito/windows"
+    "cmake.sourceDirectory": "C:/Users/Usuario/Documents/feed_vertical_infinito/windows",
+    "cmake.ignoreCMakeListsMissing": true
 }

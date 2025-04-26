@@ -1,30 +1,24 @@
+import 'package:atproto_core/atproto_core.dart' hide Response;
 import 'package:bluesky/bluesky.dart';
 import 'package:feed_vertical_infinito/models/video.dart';
 import 'package:get_it/get_it.dart';
+import 'package:logging/logging.dart';
 
 class BskyVideos {
-  late final Bluesky bluesky;
+  final Bluesky bluesky = GetIt.instance<Bluesky>();
+  final _logger = Logger('BskyVideos');
+
+  // Voltando para a URI original (com DID) do feed "The Vids"
+  final String _popularFeedUriString = 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/thevids';
 
   // Cursor para paginação
   String? _cursor;
   bool _hasMoreVideos = true;
 
   // Limite de itens por página
-  final int _limit = 3;
+  final int _limit = 10;
 
-  BskyVideos() {
-    init();
-  }
-
-  Future<void> init() async {
-    // Obtém a instância do Bluesky do GetIt ou cria uma nova instância anônima
-    try {
-      bluesky = GetIt.instance<Bluesky>();
-    } catch (_) {
-      // Se não estiver registrado no GetIt, cria uma instância anônima
-      bluesky = Bluesky.anonymous();
-    }
-  }
+  BskyVideos();
 
   /// Reseta o estado da paginação
   void resetPagination() {
@@ -40,63 +34,59 @@ class BskyVideos {
   /// Retorna uma lista de objetos [Video]
   /// A funcionalidade de paginação é controlada internamente através do cursor
   Future<List<Video>> fetchVideos() async {
+    _logger.info('>>> MÉTODO fetchVideos CHAMADO <<<');
     if (!_hasMoreVideos) {
+      _logger.info('fetchVideos: _hasMoreVideos é false, retornando lista vazia.');
       return [];
     }
 
+    _logger.info('Buscando feed popular ($_popularFeedUriString)... Cursor: $_cursor, Limite: $_limit');
+
     try {
-      // Buscar o timeline de posts com filtro para obter apenas vídeos
-      final getTimeline = await bluesky.feed.getTimeline(
-        algorithm:
-            'reverse-chronological', // algoritmo para ordenação (mais recentes primeiro)
+      final response = await bluesky.feed.getFeed(
+        generatorUri: AtUri.parse(_popularFeedUriString),
         limit: _limit,
         cursor: _cursor,
       );
 
-      // Atualiza o cursor para a próxima página
-      _cursor = getTimeline.data.cursor;
-
-      // Verifica se há mais vídeos disponíveis
-      if (getTimeline.data.feed.isEmpty || getTimeline.data.cursor == null) {
+      if (response.data.feed.isEmpty) {
+        _logger.info('Nenhum post encontrado na resposta.');
         _hasMoreVideos = false;
+        return [];
       }
 
-      // Filtra a timeline para obter apenas posts com vídeos
-      final videoItems =
-          getTimeline.data.feed.where((item) {
-            // Converte o post para JSON para facilitar a verificação dos embeds
-            final postJson = item.post.toJson();
-            final embed = postJson['embed'];
+      final List<Video> videos = [];
+      for (final item in response.data.feed) {
+        // Logar o embed completo para depuração
+        final postJson = item.post.toJson();
+        final embedData = postJson['record']?['embed'];
+        _logger.info('Post URI: ${item.post.uri} - Embed Data: $embedData');
 
-            // Se não tem embed, não é um vídeo
-            if (embed == null) {
-              return false;
-            }
+        // Tenta criar um objeto Video a partir do post
+        try {
+          final video = Video.fromJson(postJson);
+          if (video.videoUrl.isNotEmpty) {
+            _logger.info('>>> Vídeo VÁLIDO encontrado: ${video.videoUrl}');
+            videos.add(video);
+          }
+        } catch (e) {
+          _logger.warning('Erro ao processar post ${item.post.uri}: $e');
+        }
+      }
 
-            // Verifica o tipo de embed
-            final embedType = embed[r'$type'] as String?;
+      _cursor = response.data.cursor;
+      _hasMoreVideos = _cursor != null && _cursor!.isNotEmpty;
 
-            // Verifica se é um dos tipos que podem conter vídeo
-            if (embedType?.contains('media') ?? false) {
-              // Embeds de mídia podem conter vídeos
-              final mediaItems = embed['media']?['items'] as List?;
-              if (mediaItems != null && mediaItems.isNotEmpty) {
-                return mediaItems.any(
-                  (media) =>
-                      (media['mimetype'] as String?)?.startsWith('video/') ??
-                      false,
-                );
-              }
-            }
+      _logger.info('Busca concluída. ${videos.length} vídeos encontrados. Próximo cursor: $_cursor. Há mais vídeos: $_hasMoreVideos');
 
-            return false;
-          }).toList();
+      return videos;
 
-      // Converte os itens em objetos Video
-      return videoItems
-          .map((item) => Video.fromJson({'post': item.post.toJson()}))
-          .toList();
+    } on XRPCException catch (e) {
+      _logger.severe('Erro na API Bluesky ao buscar feed ($_popularFeedUriString): ${e.toString()}');
+      _hasMoreVideos = false;
+      return [];
     } catch (e) {
+      _logger.severe('Erro inesperado ao buscar vídeos: $e');
       _hasMoreVideos = false;
       return [];
     }
@@ -107,8 +97,10 @@ class BskyVideos {
   /// [pageKey] é o cursor para a próxima página
   /// [pageSize] é a quantidade de itens por página
   Future<PaginationResult> fetchPage({String? pageKey, int? pageSize}) async {
+    _logger.info('>>> MÉTODO fetchPage CHAMADO - pageKey: $pageKey, pageSize: $pageSize <<<');
     // Se um pageKey foi fornecido, atualiza o cursor interno
     if (pageKey != null) {
+      _logger.info('fetchPage: Atualizando cursor interno para $pageKey');
       _cursor = pageKey;
     }
 
