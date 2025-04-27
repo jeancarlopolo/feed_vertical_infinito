@@ -1,3 +1,4 @@
+import 'dart:io' as io;
 import 'package:atproto_core/atproto_core.dart' hide Response;
 import 'package:bluesky/bluesky.dart';
 import 'package:feed_vertical_infinito/models/video.dart';
@@ -8,39 +9,81 @@ class BskyVideos {
   final Bluesky bluesky = GetIt.instance<Bluesky>();
   final _logger = Logger('BskyVideos');
 
-  // Voltando para a URI original (com DID) do feed "The Vids"
-  final String _popularFeedUriString = 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/thevids';
+  // Feed URI
+  final String _popularFeedUriString =
+      'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/thevids';
 
-  // Cursor para paginação
+  // Pagination
   String? _cursor;
   bool _hasMoreVideos = true;
-
-  // Limite de itens por página
   final int _limit = 10;
+
+  static const List<String> _compatibleFormats = [
+    'video/mp4',
+    'video/quicktime', // .mov
+    'video/3gpp', // .3gp
+  ];
+
+  static const List<String> _androidOnlyFormats = [
+    'video/webm',
+    'video/x-matroska', // .mkv
+  ];
+
+  // Formats known to be problematic or less common in mobile apps
+  static const List<String> _problematicFormats = [
+    'video/x-msvideo', // .avi
+    'video/divx',
+    'video/x-flv', // .flv
+    'video/mpeg',
+  ];
+
+  /// Checks if the video format is likely compatible with the current platform.
+  /// This is a relaxed check, prioritizing common mobile formats.
+  bool _isFormatCompatible(String? mimeType) {
+    if (mimeType == null || mimeType.isEmpty) {
+      _logger.warning('Skipping video due to missing mimeType');
+      return false;
+    }
+
+    final lowerMimeType = mimeType.toLowerCase();
+    _logger.info('Checking format compatibility for: $lowerMimeType');
+
+    // 1. Reject known problematic formats first
+    if (_problematicFormats.any((format) => lowerMimeType.contains(format))) {
+      _logger.warning('Rejecting known problematic format: $lowerMimeType');
+      return false;
+    }
+
+    // 2. Allow generally compatible formats (includes MP4/MOV which use AVC)
+    if (_compatibleFormats.any((format) => lowerMimeType.contains(format))) {
+      _logger.info('Allowing generally compatible format: $lowerMimeType');
+      return true;
+    }
+
+    // 3. Allow Android-specific formats if on Android
+    if (io.Platform.isAndroid) {
+      if (_androidOnlyFormats.any((format) => lowerMimeType.contains(format))) {
+        _logger.info('Allowing Android-specific format: $lowerMimeType');
+        return true;
+      }
+    }
+
+    // 4. If it didn't match any allowed rule, skip it.
+    _logger.warning('Skipping format not explicitly allowed: $lowerMimeType');
+    return false;
+  }
 
   BskyVideos();
 
-  /// Reseta o estado da paginação
   void resetPagination() {
     _cursor = null;
     _hasMoreVideos = true;
   }
 
-  /// Verifica se há mais vídeos disponíveis
   bool get hasMoreVideos => _hasMoreVideos;
 
-  /// Busca a próxima página de vídeos do feed
-  ///
-  /// Retorna uma lista de objetos [Video]
-  /// A funcionalidade de paginação é controlada internamente através do cursor
   Future<List<Video>> fetchVideos() async {
-    _logger.info('>>> MÉTODO fetchVideos CHAMADO <<<');
-    if (!_hasMoreVideos) {
-      _logger.info('fetchVideos: _hasMoreVideos é false, retornando lista vazia.');
-      return [];
-    }
-
-    _logger.info('Buscando feed popular ($_popularFeedUriString)... Cursor: $_cursor, Limite: $_limit');
+    if (!_hasMoreVideos) return [];
 
     try {
       final response = await bluesky.feed.getFeed(
@@ -50,80 +93,54 @@ class BskyVideos {
       );
 
       if (response.data.feed.isEmpty) {
-        _logger.info('Nenhum post encontrado na resposta.');
         _hasMoreVideos = false;
         return [];
       }
 
       final List<Video> videos = [];
       for (final item in response.data.feed) {
-        // Logar o embed completo para depuração
         final postJson = item.post.toJson();
-        final embedData = postJson['record']?['embed'];
-        _logger.info('Post URI: ${item.post.uri} - Embed Data: $embedData');
+        final mimeType =
+            postJson['record']?['embed']?['video']?['mimeType'] as String?;
 
-        // Tenta criar um objeto Video a partir do post
+        // Use the relaxed compatibility check
+        if (!_isFormatCompatible(mimeType)) {
+          // Se o formato não for compatível, simplesmente pule para o próximo item.
+          continue; // Pula para o próximo item do loop
+        }
+
+        // Se o formato for compatível, tente criar o Video
         try {
           final video = Video.fromJson(postJson);
           if (video.videoUrl.isNotEmpty) {
-            _logger.info('>>> Vídeo VÁLIDO encontrado: ${video.videoUrl}');
             videos.add(video);
           }
-        } catch (e) {
-          _logger.warning('Erro ao processar post ${item.post.uri}: $e');
+        } catch (e, stackTrace) {
+          _logger.severe(
+            'Error processing post ${item.post.uri}: $e\nStack trace: $stackTrace',
+          );
+          // Não continue ou retorne aqui, apenas logue o erro e prossiga com outros itens.
         }
-      }
+      } // Fim do Loop
 
       _cursor = response.data.cursor;
       _hasMoreVideos = _cursor != null && _cursor!.isNotEmpty;
-
-      _logger.info('Busca concluída. ${videos.length} vídeos encontrados. Próximo cursor: $_cursor. Há mais vídeos: $_hasMoreVideos');
-
+      _logger.info(
+        'Returning ${videos.length} videos. New cursor: ${_cursor != null}',
+      );
       return videos;
-
-    } on XRPCException catch (e) {
-      _logger.severe('Erro na API Bluesky ao buscar feed ($_popularFeedUriString): ${e.toString()}');
+    } on XRPCException catch (e, stackTrace) {
+      _logger.severe(
+        'API error when fetching from Bluesky: $e\nStack trace: $stackTrace',
+      );
       _hasMoreVideos = false;
       return [];
-    } catch (e) {
-      _logger.severe('Erro inesperado ao buscar vídeos: $e');
+    } catch (e, stackTrace) {
+      _logger.severe(
+        'Unexpected error fetching videos: $e\nStack trace: $stackTrace',
+      );
       _hasMoreVideos = false;
       return [];
     }
   }
-
-  /// Método específico para uso com infinite_scroll_pagination
-  ///
-  /// [pageKey] é o cursor para a próxima página
-  /// [pageSize] é a quantidade de itens por página
-  Future<PaginationResult> fetchPage({String? pageKey, int? pageSize}) async {
-    _logger.info('>>> MÉTODO fetchPage CHAMADO - pageKey: $pageKey, pageSize: $pageSize <<<');
-    // Se um pageKey foi fornecido, atualiza o cursor interno
-    if (pageKey != null) {
-      _logger.info('fetchPage: Atualizando cursor interno para $pageKey');
-      _cursor = pageKey;
-    }
-
-    // Se nenhum cursor for fornecido e não tivermos um, começa do início
-    if (_cursor == null) {
-      resetPagination();
-    }
-
-    // Busca os vídeos
-    final videos = await fetchVideos();
-
-    // Retorna os resultados formatados para uso com infinite_scroll_pagination
-    return PaginationResult(
-      items: videos,
-      nextPageKey: _hasMoreVideos ? _cursor : null,
-    );
-  }
-}
-
-/// Classe auxiliar para retornar resultados paginados
-class PaginationResult {
-  final List<Video> items;
-  final String? nextPageKey;
-
-  PaginationResult({required this.items, this.nextPageKey});
 }

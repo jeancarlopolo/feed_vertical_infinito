@@ -13,14 +13,23 @@ class AuthorInfo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        CircleAvatar(backgroundImage: NetworkImage(authorAvatar)),
-        SizedBox(width: 8),
-        Text(authorDisplayName, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold)),
-        SizedBox(width: 8),
-        Text(authorHandle, style: Theme.of(context).textTheme.bodyMedium),
-      ],
+    return FittedBox(
+      alignment: Alignment.centerLeft,
+      fit: BoxFit.scaleDown,
+      child: Row(
+        children: [
+          CircleAvatar(backgroundImage: NetworkImage(authorAvatar)),
+          const SizedBox(width: 8),
+          Text(
+            authorDisplayName,
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(width: 4),
+          Text(authorHandle, style: Theme.of(context).textTheme.bodyMedium),
+        ],
+      ),
     );
   }
 }
