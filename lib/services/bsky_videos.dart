@@ -16,7 +16,7 @@ class BskyVideos {
   // Pagination
   String? _cursor;
   bool _hasMoreVideos = true;
-  final int limit = 10;
+  final int limit = 20;
 
   static const List<String> _compatibleFormats = [
     'video/mp4',

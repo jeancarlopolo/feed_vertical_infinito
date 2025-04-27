@@ -58,8 +58,6 @@ class FeedState extends State<Feed> {
   final missingNextPage = signal(false);
   bool wasMissingNextPage = false;
 
- 
-
   @override
   void initState() {
     super.initState();
@@ -111,12 +109,12 @@ class FeedState extends State<Feed> {
         );
         pages.internalValue[oldIndex - 1] = SizedBox();
       }
-      // próximo vídeo não existe, então vai ter que carregar mais
-      if (newIndex + 1 > pages.length || nextVideos.isEmpty()) {
+      // próximo vídeo não existe ou está fora dos limites atuais da lista `pages`, então vai ter que carregar mais
+      if (newIndex + 1 >= pages.length || nextVideos.isEmpty()) {
         missingNextPage.value = true;
       } else {
         try {
-          // criar a página do vídeo seguinte
+          // criar a página do vídeo seguinte, pois sabemos que nextVideos não está vazia E o índice é válido
           FileVideo fileVideo = nextVideos.dequeueHead();
           pages.internalValue[newIndex + 1] = MyVideoPlayer(
             UniqueKey(),
@@ -207,27 +205,16 @@ class FeedState extends State<Feed> {
             // se já baixou 2 vídeos, pode criar as páginas iniciais
             _createInitialPages();
           } else if (completed > 2) {
-            // usuário está parado na última página esperando carregar mais vídeos
-            // batch pra impedir o caso de o usuário rolar pra baixo ANTES da página ser criada
-            if (pages[pages.length - 1] is MyVideoPlayer &&
-                MyVideoPlayer.totalVideoPages < 3 &&
-                pages.length > 2) {
-              _logger.info('Adding MyVideoPlayer');
-              pages.add(
-                MyVideoPlayer(UniqueKey(), file: file, videoData: video),
-              );
-            } else {
-              _logger.info('Adding SizedBox');
-              _logger.info(
-                'last item is video: ${pages[pages.length - 1] is MyVideoPlayer}',
-              );
-              _logger.info(
-                'total video pages: ${MyVideoPlayer.totalVideoPages}',
-              );
-              _logger.info('pages length: ${pages.length}');
-              pages.add(SizedBox());
-              nextVideos.enqueueTail(FileVideo(file: file, video: video));
-            }
+            // Para vídeos subsequentes, adicione um placeholder SizedBox na lista de páginas
+            // e adicione o vídeo baixado na fila 'nextVideos'.
+            // A função 'move' será responsável por transformar o SizedBox em MyVideoPlayer quando necessário.
+            _logger.info(
+              'Adding SizedBox for index ${pages.length} and queueing video',
+            );
+            // Garante que o placeholder seja adicionado *antes* de enfileirar,
+            // para que o tamanho da lista 'pages' esteja correto se 'move' for chamado.
+            pages.add(SizedBox());
+            nextVideos.enqueueTail(FileVideo(file: file, video: video));
           }
           _logger.info(
             '$completedThisFetch/$completed completed: $indexº finished loading',
@@ -242,6 +229,70 @@ class FeedState extends State<Feed> {
         completedThisFetch++;
       }
     });
+  }
+
+  // correção pra quando o vídeo atual é um sizedbox
+  void fixPages(int index) {
+    if (pages[index] is! MyVideoPlayer) {
+      pages[index] = MyVideoPlayer(
+        UniqueKey(),
+        file: cachedVideoFiles[index],
+        videoData: cachedVideos[index],
+      );
+      if (index == pages.length - 1) {
+        missingNextPage.value = true;
+      } else {
+        pages[index + 1] = MyVideoPlayer(
+          UniqueKey(),
+          file: cachedVideoFiles[index + 1],
+          videoData: cachedVideos[index + 1],
+        );
+        pages[index - 1] = MyVideoPlayer(
+          UniqueKey(),
+          file: cachedVideoFiles[index - 1],
+          videoData: cachedVideos[index - 1],
+        );
+      }
+    }
+  }
+
+  // correção pra quando os vídeos adjacentes são iguais
+  void fixDuplicates(int index) {
+    // se não for o último
+    if (index < pages.length - 1) {
+      // se for um vídeo e tiver o vídeo errado dentro dele, corrigir
+      if (pages[index + 1] is MyVideoPlayer &&
+          (pages[index + 1] as MyVideoPlayer).videoData.videoUrl !=
+              cachedVideos[index + 1].videoUrl) {
+        pages[index + 1] = MyVideoPlayer(
+          UniqueKey(),
+          file: cachedVideoFiles[index + 1],
+          videoData: cachedVideos[index + 1],
+        );
+      }
+    } else if (index > 0) {
+      // se for um vídeo e tiver o vídeo errado dentro dele, corrigir
+      if (pages[index - 1] is MyVideoPlayer &&
+          (pages[index - 1] as MyVideoPlayer).videoData.videoUrl !=
+              cachedVideos[index - 1].videoUrl) {
+        pages[index - 1] = MyVideoPlayer(
+          UniqueKey(),
+          file: cachedVideoFiles[index - 1],
+          videoData: cachedVideos[index - 1],
+        );
+      }
+    } else {
+      // se for um vídeo e tiver o vídeo errado dentro dele, corrigir
+      if (pages[index] is MyVideoPlayer &&
+          (pages[index] as MyVideoPlayer).videoData.videoUrl !=
+              cachedVideos[index].videoUrl) {
+        pages[index] = MyVideoPlayer(
+          UniqueKey(),
+          file: cachedVideoFiles[index],
+          videoData: cachedVideos[index],
+        );
+      }
+    }
   }
 
   Future<void> _fetchMoreVideos() async {
@@ -268,22 +319,29 @@ class FeedState extends State<Feed> {
             move(currentPage.round(), index.round());
             if (pages[index] is! MyVideoPlayer) {
               _logger.info('SizedBox at $index');
-              _logger.info('pages.length: ${pages.length}');
-              _logger.info('[${pages[index - 1] is MyVideoPlayer}]');
-              _logger.info('[${pages[index] is MyVideoPlayer}]');
-              _logger.info('[${pages[index + 1] is MyVideoPlayer}]');
+              _logger.info('${pages.value}');
             }
             currentPage = index.round();
           },
           itemCount: pages.watch(context).length,
           itemBuilder: (context, index) {
-            if (index >= pages.length) {
+            // Obtém a lista observada pelo watch
+            final watchedPages = pages.watch(context);
+            // Verifica se o índice é válido para a lista observada no momento
+            if (index >= watchedPages.length) {
               _logger.warning(
-                'Attempted to build page at invalid index $index while pages.length is ${pages.length}. Returning SizedBox.',
+                'Attempted to build page at invalid index $index while pages.length is ${watchedPages.length}. Returning SizedBox.',
               );
               return const SizedBox();
+            } else {
+              if (watchedPages[index] is! MyVideoPlayer) {
+                fixPages(index);
+              }
+              fixDuplicates(index);
+
+              // Retorna o widget do índice correspondente da lista observada
+              return watchedPages[index];
             }
-            return pages.watch(context)[index];
           },
         );
   }

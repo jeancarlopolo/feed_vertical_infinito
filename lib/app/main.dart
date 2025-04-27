@@ -82,6 +82,7 @@ Future<void> setup(Session sessionData) async {
       ),
     ),
   );
+  GetIt.instance<CacheManager>().emptyCache();
 }
 
 // Widget simples para exibir erro de inicialização
