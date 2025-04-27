@@ -4,6 +4,7 @@ import 'package:feed_vertical_infinito/models/video.dart';
 import 'package:feed_vertical_infinito/widgets/author_info.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 class MyVideoPlayer extends StatefulWidget {
   final UniqueKey uniqueKey;
@@ -43,9 +44,9 @@ class _MyVideoPlayerState extends State<MyVideoPlayer> {
     super.dispose();
   }
 
+
   @override
   Widget build(BuildContext context) {
-    final isPlaying = _videoController.value.isPlaying;
     return Stack(
       alignment: Alignment.center,
       fit: StackFit.expand,
@@ -55,22 +56,41 @@ class _MyVideoPlayerState extends State<MyVideoPlayer> {
           child: SizedBox(
             width: _videoController.value.size.width,
             height: _videoController.value.size.height,
-            child: VideoPlayer(_videoController),
+            child: VisibilityDetector(
+              key: widget.uniqueKey,
+              onVisibilityChanged: (visibilityInfo) {
+                if (!mounted || !_videoController.value.isInitialized) {
+                  return;
+                }
+                var shouldPlay = visibilityInfo.visibleFraction > 0;
+                if (shouldPlay && !_videoController.value.isPlaying) {
+                  _videoController.play();
+                  if (mounted) setState(() {});
+                } else if (!shouldPlay && _videoController.value.isPlaying) {
+                  _videoController.pause();
+                  if (mounted) setState(() {});
+                }
+              },
+              child: VideoPlayer(_videoController),
+            ),
           ),
         ),
         Positioned.fill(
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () {
+              if (!mounted || !_videoController.value.isInitialized) {
+                return;
+              }
               setState(() {
-                isPlaying
+                _videoController.value.isPlaying
                     ? _videoController.pause()
                     : _videoController.play();
               });
             },
           ),
         ),
-        isPlaying
+        _videoController.value.isInitialized && _videoController.value.isPlaying
             ? const SizedBox.shrink()
             : const Icon(Icons.play_arrow, color: Colors.white70, size: 60),
         Positioned(

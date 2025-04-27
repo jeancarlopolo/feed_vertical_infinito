@@ -42,7 +42,6 @@ class FeedState extends State<Feed> {
   // lista de widgets de vídeo
   // páginas distantes tomam dispose e viram SizedBox
   final ListSignal<Widget> pages = ListSignal([]);
-  final pagesLength = signal(0);
   // página atual
   int currentPage = 0;
   // a fila precisa se adaptar dependendo da direção do scroll
@@ -58,6 +57,8 @@ class FeedState extends State<Feed> {
   // flag pro caso em que o usuário chegou no final da lista de vídeos sem cachear mais vídeos
   final missingNextPage = signal(false);
   bool wasMissingNextPage = false;
+
+ 
 
   @override
   void initState() {
@@ -122,7 +123,6 @@ class FeedState extends State<Feed> {
             file: fileVideo.file,
             videoData: fileVideo.video,
           );
-          pagesLength.value = pages.length;
         } catch (e) {
           _logger.severe('Error creating next page: $e');
           _logger.severe('pages.length: ${pages.length}');
@@ -181,7 +181,6 @@ class FeedState extends State<Feed> {
         videoData: cachedVideos[1],
       ),
     );
-    pagesLength.value = pages.length;
   }
 
   int completed = 0;
@@ -209,20 +208,31 @@ class FeedState extends State<Feed> {
             _createInitialPages();
           } else if (completed > 2) {
             // usuário está parado na última página esperando carregar mais vídeos
+            // batch pra impedir o caso de o usuário rolar pra baixo ANTES da página ser criada
             if (pages[pages.length - 1] is MyVideoPlayer &&
                 MyVideoPlayer.totalVideoPages < 3 &&
                 pages.length > 2) {
+              _logger.info('Adding MyVideoPlayer');
               pages.add(
                 MyVideoPlayer(UniqueKey(), file: file, videoData: video),
               );
             } else {
+              _logger.info('Adding SizedBox');
+              _logger.info(
+                'last item is video: ${pages[pages.length - 1] is MyVideoPlayer}',
+              );
+              _logger.info(
+                'total video pages: ${MyVideoPlayer.totalVideoPages}',
+              );
+              _logger.info('pages length: ${pages.length}');
               pages.add(SizedBox());
               nextVideos.enqueueTail(FileVideo(file: file, video: video));
             }
-            pagesLength.value = pages.length;
           }
-          _logger.info('$completedThisFetch/$completed completed: $indexº finished loading');
-          if (completedThisFetch == 10) {
+          _logger.info(
+            '$completedThisFetch/$completed completed: $indexº finished loading',
+          );
+          if (completedThisFetch >= bskyVideos.limit / 2) {
             fetchingMoreVideos = false;
           }
         });
@@ -256,13 +266,22 @@ class FeedState extends State<Feed> {
           physics: const PageScrollPhysics(),
           onPageChanged: (index) {
             move(currentPage.round(), index.round());
-            currentPage = index.round();
-            pagesLength.value = pages.length;
-          },
-          itemCount: pagesLength.watch(context),
-          itemBuilder: (context, index) {
-            if (pages.watch(context)[index] is SizedBox) {
+            if (pages[index] is! MyVideoPlayer) {
               _logger.info('SizedBox at $index');
+              _logger.info('pages.length: ${pages.length}');
+              _logger.info('[${pages[index - 1] is MyVideoPlayer}]');
+              _logger.info('[${pages[index] is MyVideoPlayer}]');
+              _logger.info('[${pages[index + 1] is MyVideoPlayer}]');
+            }
+            currentPage = index.round();
+          },
+          itemCount: pages.watch(context).length,
+          itemBuilder: (context, index) {
+            if (index >= pages.length) {
+              _logger.warning(
+                'Attempted to build page at invalid index $index while pages.length is ${pages.length}. Returning SizedBox.',
+              );
+              return const SizedBox();
             }
             return pages.watch(context)[index];
           },

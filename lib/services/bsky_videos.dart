@@ -16,7 +16,7 @@ class BskyVideos {
   // Pagination
   String? _cursor;
   bool _hasMoreVideos = true;
-  final int _limit = 20;
+  final int limit = 10;
 
   static const List<String> _compatibleFormats = [
     'video/mp4',
@@ -88,7 +88,7 @@ class BskyVideos {
     try {
       final response = await bluesky.feed.getFeed(
         generatorUri: AtUri.parse(_popularFeedUriString),
-        limit: _limit,
+        limit: limit,
         cursor: _cursor,
       );
 
