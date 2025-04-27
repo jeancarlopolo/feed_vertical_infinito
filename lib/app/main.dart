@@ -25,6 +25,7 @@ Future<void> setupApp() async {
   // devido ao feed vids não ser público, ATProto.anonymous não funciona
   // então usamos credenciais de uma conta autenticada
   // essa conta foi criada especialmente para esse propósito com um email temporário
+  // se fosse público, poderia usar ATProto.anonymous
   const String handle = 'contaautenticadora.bsky.social';
   const String appPassword = 'bbnj-5icx-bj5e-3tbo';
 
@@ -82,7 +83,6 @@ Future<void> setup(Session sessionData) async {
       ),
     ),
   );
-  GetIt.instance<CacheManager>().emptyCache();
 }
 
 // Widget simples para exibir erro de inicialização
