@@ -8,14 +8,20 @@ import 'package:feed_vertical_infinito/utils/queue.dart';
 import 'package:feed_vertical_infinito/widgets/my_video_player.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 import 'package:get_it/get_it.dart';
 import 'package:logging/logging.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 
-class Feed extends StatefulWidget {
-  final List<Video> videos;
+class FileVideo {
+  final File file;
+  final Video video;
 
-  const Feed({super.key, required this.videos});
+  FileVideo({required this.file, required this.video});
+}
+
+class Feed extends StatefulWidget {
+  const Feed({super.key});
 
   @override
   FeedState createState() => FeedState();
@@ -31,7 +37,8 @@ class FeedState extends State<Feed> {
   // flag pra evitar mais de uma requisição de vídeos ao mesmo tempo
   bool fetchingMoreVideos = false;
   // lista de vídeos já baixados e cacheados
-  final List<File> cachedVideos = [];
+  final List<File> cachedVideoFiles = [];
+  final List<Video> cachedVideos = [];
   // lista de widgets de vídeo
   // páginas distantes tomam dispose e viram SizedBox
   final ListSignal<Widget> pages = ListSignal([]);
@@ -43,18 +50,42 @@ class FeedState extends State<Feed> {
   // USUÁRIO SUBINDO: vídeo de baixo é empilhado na fila de seguintes e a pilha de anteriores é desempilhada
   // VÍDEOS NOVOS DA API: são enfileirados na fila de seguintes
   // por indução, só vai existir três vídeos na lista de páginas
-  Queue<File> previousVideos = Queue<File>();
-  Queue<File> nextVideos = Queue<File>();
+  Queue<FileVideo> previousVideos = Queue<FileVideo>();
+  Queue<FileVideo> nextVideos = Queue<FileVideo>();
   // controller pra controlar as páginas
   PageController pageController = PageController();
 
   // flag pro caso em que o usuário chegou no final da lista de vídeos sem cachear mais vídeos
   final missingNextPage = signal(false);
+  bool wasMissingNextPage = false;
 
   @override
   void initState() {
     super.initState();
     _fetchMoreVideos();
+    missingNextPage.subscribe((value) {
+      if (value) {
+        Fluttertoast.showToast(
+          msg: "Carregando mais vídeos...",
+          toastLength: Toast.LENGTH_SHORT,
+          gravity: ToastGravity.BOTTOM,
+          timeInSecForIosWeb: 1,
+          backgroundColor: Colors.black.withAlpha(128),
+          textColor: Colors.white,
+          fontSize: 16.0,
+        );
+        wasMissingNextPage = true;
+      } else {
+        Fluttertoast.cancel();
+        if (wasMissingNextPage) {
+          if (completed > pages.length) {
+            wasMissingNextPage = false;
+          } else {
+            missingNextPage.value = true;
+          }
+        }
+      }
+    });
   }
 
   @override
@@ -67,22 +98,37 @@ class FeedState extends State<Feed> {
     if (oldIndex < newIndex) {
       // se estiverem acabando vídeos, começar a buscar mais
       if (nextVideos.length < 10 && !fetchingMoreVideos) {
-        Future.microtask(() => _fetchMoreVideos());
+        _fetchMoreVideos();
       }
       // se não for o primeiro vídeo, empilhar o antigo anterior no topo da pilha de anteriores
       if (oldIndex != 0) {
-        previousVideos.enqueueHead(cachedVideos[oldIndex - 1]);
-        pages[oldIndex - 1] = SizedBox();
+        previousVideos.enqueueHead(
+          FileVideo(
+            file: cachedVideoFiles[oldIndex - 1],
+            video: cachedVideos[oldIndex - 1],
+          ),
+        );
+        pages.internalValue[oldIndex - 1] = SizedBox();
       }
-      if (newIndex + 1 > pagesLength.value) {
+      // próximo vídeo não existe, então vai ter que carregar mais
+      if (newIndex + 1 > pages.length || nextVideos.isEmpty()) {
         missingNextPage.value = true;
       } else {
-        // criar a página do vídeo seguinte
-        pages[newIndex + 1] = MyVideoPlayer(
-          UniqueKey(),
-          file: nextVideos.dequeueHead(),
-          videoData: widget.videos[newIndex + 1],
-        );
+        try {
+          // criar a página do vídeo seguinte
+          FileVideo fileVideo = nextVideos.dequeueHead();
+          pages.internalValue[newIndex + 1] = MyVideoPlayer(
+            UniqueKey(),
+            file: fileVideo.file,
+            videoData: fileVideo.video,
+          );
+          pagesLength.value = pages.length;
+        } catch (e) {
+          _logger.severe('Error creating next page: $e');
+          _logger.severe('pages.length: ${pages.length}');
+          _logger.severe('cachedVideos.length: ${cachedVideoFiles.length}');
+          _logger.severe('newIndex: $newIndex');
+        }
       }
       setState(() {});
     }
@@ -90,15 +136,31 @@ class FeedState extends State<Feed> {
     else if (oldIndex > newIndex) {
       // se não for o primeiro vídeo, vai ter mais vídeos na fila de anteriores, então cria uma página de vídeo anterior
       if (newIndex != 0) {
+        FileVideo fileVideo = previousVideos.dequeueHead();
         pages[newIndex - 1] = MyVideoPlayer(
           UniqueKey(),
-          file: previousVideos.dequeueHead(),
-          videoData: widget.videos[newIndex - 1],
+          file: fileVideo.file,
+          videoData: fileVideo.video,
         );
       }
-      // empilhar o antigo vídeo seguinte na fila de seguintes
-      nextVideos.enqueueHead(cachedVideos[oldIndex + 1]);
-      pages[oldIndex + 1] = SizedBox();
+      try {
+        // empilhar o antigo vídeo seguinte na fila de seguintes
+        if (oldIndex + 1 < pages.length) {
+          nextVideos.enqueueHead(
+            FileVideo(
+              file: cachedVideoFiles[oldIndex + 1],
+              video: cachedVideos[oldIndex + 1],
+            ),
+          );
+          pages[oldIndex + 1] = SizedBox();
+        }
+      } catch (e) {
+        _logger.severe('Error moving video: $e');
+        _logger.severe('oldIndex: $oldIndex');
+        _logger.severe('newIndex: $newIndex');
+        _logger.severe('pages.length: ${pages.length}');
+        _logger.severe('cachedVideos.length: ${cachedVideoFiles.length}');
+      }
     }
     _logger.info('previousVideos: ${previousVideos.toString()}');
     _logger.info('nextVideos: ${nextVideos.toString()}');
@@ -108,47 +170,67 @@ class FeedState extends State<Feed> {
     pages.add(
       MyVideoPlayer(
         UniqueKey(),
-        file: cachedVideos[0],
-        videoData: widget.videos[0],
+        file: cachedVideoFiles[0],
+        videoData: cachedVideos[0],
       ),
     );
     pages.add(
       MyVideoPlayer(
         UniqueKey(),
-        file: cachedVideos[1],
-        videoData: widget.videos[1],
+        file: cachedVideoFiles[1],
+        videoData: cachedVideos[1],
       ),
     );
     pagesLength.value = pages.length;
   }
+
   int completed = 0;
 
   Future<void> _downloadAndCacheVideos(List<Video> apiVideos) async {
     fetchingMoreVideos = true;
+    var completedThisFetch = 0;
     _logger.info('Downloading and caching videos');
     apiVideos.asMap().forEach((index, video) async {
       // pra cada vídeo da api, baixar e cachear
       // os mais leves acabam sendo cacheados primeiro por conta do microtask
-      Future.microtask(() async {
-        cachedVideos.add(await _cacheManager.getSingleFile(video.videoUrl));
-        nextVideos.enqueueTail(cachedVideos.last);
-        _logger.info('nextVideos: ${nextVideos.toString()}');
+      try {
+        Future.microtask(() async {
+          File file = await _cacheManager.getSingleFile(video.videoUrl);
+          cachedVideoFiles.add(file);
+          cachedVideos.add(video);
+          completed++;
+          completedThisFetch++;
+
+          if (missingNextPage.value) {
+            missingNextPage.value = false;
+          }
+          if (completed == 2) {
+            // se já baixou 2 vídeos, pode criar as páginas iniciais
+            _createInitialPages();
+          } else if (completed > 2) {
+            // usuário está parado na última página esperando carregar mais vídeos
+            if (pages[pages.length - 1] is MyVideoPlayer &&
+                MyVideoPlayer.totalVideoPages < 3 &&
+                pages.length > 2) {
+              pages.add(
+                MyVideoPlayer(UniqueKey(), file: file, videoData: video),
+              );
+            } else {
+              pages.add(SizedBox());
+              nextVideos.enqueueTail(FileVideo(file: file, video: video));
+            }
+            pagesLength.value = pages.length;
+          }
+          _logger.info('$completedThisFetch/$completed completed: $indexº finished loading');
+          if (completedThisFetch == 10) {
+            fetchingMoreVideos = false;
+          }
+        });
+      } catch (e) {
+        _logger.severe('Error downloading and caching video: $e');
         completed++;
-        if (missingNextPage.value) {
-          missingNextPage.value = false;
-        }
-        if (completed == 2) {
-          // se já baixou 2 vídeos, pode criar as páginas iniciais
-          _createInitialPages();
-        } else if (completed > 2) {
-          pages.add(SizedBox());
-          pagesLength.value = pages.length;
-        }
-        _logger.info('$completed completed $index finished loading');
-        if (completed == apiVideos.length) {
-          fetchingMoreVideos = false;
-        }
-      });
+        completedThisFetch++;
+      }
     });
   }
 
@@ -173,26 +255,14 @@ class FeedState extends State<Feed> {
           controller: pageController,
           physics: const PageScrollPhysics(),
           onPageChanged: (index) {
-            move(currentPage, index);
-            currentPage = index;
+            move(currentPage.round(), index.round());
+            currentPage = index.round();
+            pagesLength.value = pages.length;
           },
           itemCount: pagesLength.watch(context),
           itemBuilder: (context, index) {
-            if (missingNextPage.watch(context)) {
-              return Stack(
-                children: [
-                  pages.watch(context)[index],
-                  Positioned(
-                    bottom: 0,
-                    child: Column(
-                      children: [
-                        Text('Carregando mais vídeos...'),
-                        CircularProgressIndicator(),
-                      ],
-                    ),
-                  ),
-                ],
-              );
+            if (pages.watch(context)[index] is SizedBox) {
+              _logger.info('SizedBox at $index');
             }
             return pages.watch(context)[index];
           },

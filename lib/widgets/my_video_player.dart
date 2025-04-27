@@ -7,13 +7,16 @@ import 'package:video_player/video_player.dart';
 
 class MyVideoPlayer extends StatefulWidget {
   final UniqueKey uniqueKey;
-  const MyVideoPlayer(
+  MyVideoPlayer(
     this.uniqueKey, {
     required this.file,
     required this.videoData,
-  }) : super(key: uniqueKey);
+  }) : super(key: uniqueKey) {
+    totalVideoPages++;
+  }
   final File file;
   final Video videoData;
+  static int totalVideoPages = 0;
 
   @override
   State<MyVideoPlayer> createState() => _MyVideoPlayerState();
@@ -36,6 +39,7 @@ class _MyVideoPlayerState extends State<MyVideoPlayer> {
   @override
   void dispose() {
     _videoController.dispose();
+    MyVideoPlayer.totalVideoPages--;
     super.dispose();
   }
 

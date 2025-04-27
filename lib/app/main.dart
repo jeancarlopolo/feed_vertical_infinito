@@ -19,7 +19,7 @@ Future<void> setupApp() async {
   Logger.root.level = Level.INFO;
   Logger.root.onRecord.listen((record) {
     // ignore: avoid_print
-    print('${record.time}: ${record.loggerName}: ${record.message}');
+    print('meulog ${record.time}: ${record.loggerName}: ${record.message}');
   });
 
   // devido ao feed vids não ser público, ATProto.anonymous não funciona

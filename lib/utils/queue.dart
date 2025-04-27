@@ -33,4 +33,16 @@ class Queue<T> {
   }
 
   int get length => _queue.length;
+
+  T peekHead() {
+    return _queue.first;
+  }
+
+  T peekTail() {
+    return _queue.last;
+  }
+
+  bool isEmpty() {
+    return _queue.isEmpty;
+  }
 }
