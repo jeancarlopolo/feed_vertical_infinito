@@ -50,6 +50,10 @@
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
+		<key>NSAllowsArbitraryLoadsInWebContent</key>
+		<true/>
 	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Este app precisa de acesso à rede local para funcionar corretamente.</string>
 </dict>
 </plist>
