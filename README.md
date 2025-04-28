@@ -16,6 +16,7 @@ Este projeto demonstra como construir um feed de vídeo vertical infinito em Flu
 - Injeção de dependência com `get_it`.
 - Splash screen inicial.
 - Sistema de fila duplamente encadeada para gerenciar os vídeos anteriores e seguintes.
+- Testado em Android e iOS.
 
 ## 📁 Estrutura do Projeto
 
@@ -59,7 +60,8 @@ lib/
 
 ## 🤖 Como IAs foram usadas nesse projeto
 
-- [Cursor](https://www.cursor.com/) foi usada para escrever o código inicial, a maioria dos widgets (exceto o feed.dart que foi feito manualmente em sua maior parte), escrever o README e consertar erros de casos especiais. O modelo usado foi o gemini-2.5-pro-exp-03-25.
+- [Cursor](https://www.cursor.com/) foi usada para escrever o código inicial, a maioria dos widgets (exceto o feed.dart que foi feito manualmente em sua maior parte), escrever o README, consertar erros de casos especiais e entender o funcionamento do ATProto e da API do BlueSky. O modelo usado foi o gemini-2.5-pro-exp-03-25.
+- [Deepseek](https://chat.deepseek.com/) foi usada para planejar o projeto, a estratégia de cacheamento, consertar erros conceituais e outras dúvidas.
 
 ## 👨‍💻 Desenvolvido por
 
