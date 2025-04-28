@@ -7,7 +7,7 @@ import 'package:bluesky/bluesky.dart' hide Feed;
 import 'package:atproto/atproto.dart';
 import 'package:atproto_core/atproto_core.dart' hide Response;
 import 'package:logging/logging.dart';
-import '../services/bsky_videos.dart';
+import 'services/bsky_videos.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -55,7 +55,7 @@ Future<void> setupApp() async {
       ),
     );
 
-    runApp(const MainApp());
+    runApp(MainApp());
   } catch (e) {
     // ignore: avoid_print
     print('Erro fatal durante a autenticação inicial: $e');
@@ -109,4 +109,3 @@ class ErrorApp extends StatelessWidget {
     );
   }
 }
-
