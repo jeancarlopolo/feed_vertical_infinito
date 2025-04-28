@@ -10,7 +10,7 @@ Este projeto demonstra como construir um feed de vídeo vertical infinito em Flu
 
 - Feed vertical infinito de vídeos.
 - Reprodução de vídeo com `video_player`.
-- Pré-cache assíncrono de vídeos usando `flutter_cache_manager` para carregamento rápido.
+- Pré-cache assíncrono de vídeos usando `flutter_cache_manager` para carregamento rápido (vídeos que carregarem primeiro são inseridos na fila).
 - Busca de vídeos da rede social BlueSky usando `bluesky` (que é um wrapper de `atproto`) e `atproto`.
 - Gerenciamento de estado simples com `signals_flutter`.
 - Injeção de dependência com `get_it`.
